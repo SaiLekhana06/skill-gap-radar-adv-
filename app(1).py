@@ -3,6 +3,8 @@ import pandas as pd
 import re
 import pdfplumber
 from docx import Document
+resume_skills = []
+
 
 # -----------------------------
 # Page Config
@@ -13,16 +15,21 @@ st.set_page_config(page_title="Skill Gap Radar", layout="wide")
 # Load Dataset
 # -----------------------------
 @st.cache_data
+@st.cache_data
+@st.cache_data
 def load_data():
-    file = "Skill_Gap_Radar_dataset(1).xlsx"
+    file = r"C:\skill_gap_radar_data\Skill_Gap_Radar_dataset.xlsx"
+
     jobs = pd.read_excel(file, sheet_name="job_description_enriched")
     fields = pd.read_excel(file, sheet_name="field_intelligence")
     resources = pd.read_excel(file, sheet_name="skill_learning_resources")
+
     return jobs, fields, resources
+
 
 df_jobs, df_fields, df_resources = load_data()
 
-# -----------------------------
+# ----------------------------- 
 # Resume Text Extraction
 # -----------------------------
 def extract_text(file):
@@ -50,7 +57,28 @@ def match_skills(resume_text, required_skills):
         if re.search(pattern, resume_text):
             matched.append(skill)
     missing = list(set(required_skills) - set(matched))
-    return matched, missing
+    return matched, missing 
+# -----------------------------
+# Resume Skill Extraction
+# -----------------------------
+def extract_resume_skills(resume_text):
+    skills_found = []
+
+    # Create a master skill list from dataset
+    all_skills = set()
+
+    for skills in df_jobs["skills_required"]:
+        for skill in skills.split(","):
+            all_skills.add(skill.strip().lower())
+
+    # Match resume text against known skills
+    for skill in all_skills:
+        pattern = r"\b" + re.escape(skill) + r"\b"
+        if re.search(pattern, resume_text):
+            skills_found.append(skill)
+
+    return list(set(skills_found))
+
 
 # -----------------------------
 # Weighted Scoring Formula
@@ -95,6 +123,9 @@ if page == "Block 1: Target Job Analyzer":
         resume_text = extract_text(uploaded_file)
 
         required_skills = [s.strip() for s in selected_job["skills_required"].split(",")]
+       
+        resume_skills = extract_resume_skills(text)
+
 
         matched, missing = match_skills(resume_text, required_skills)
 
@@ -158,29 +189,64 @@ elif page == "Block 3: Resume Role Finder":
     uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx"])
 
     if uploaded_file:
+
+        # Step 1: Extract resume text
         resume_text = extract_text(uploaded_file)
+
+        # Step 2: Extract skills from resume
+        resume_skills = extract_resume_skills(resume_text)
 
         role_scores = []
 
+        # Step 3: Compare resume with all job roles
         for _, row in df_jobs.iterrows():
-            required_skills = [s.strip() for s in row["skills_required"].split(",")]
-            matched, _ = match_skills(resume_text, required_skills)
 
-            score = calculate_score(
-                matched,
-                required_skills,
-                row["demand_score"],
-                row["growth_rate_percent"],
-                row["competition_index"],
-            )
+            role = row["job_title"]
 
-            role_scores.append((row["job_title"], score))
+            required_skills = [
+                s.strip().lower() for s in row["skills_required"].split(",")
+            ]
 
-        role_scores = sorted(role_scores, key=lambda x: x[1], reverse=True)[:3]
+            matched = set(resume_skills).intersection(required_skills)
+            missing = list(set(required_skills) - matched)
+
+            # Weighted professional score
+            skill_match_ratio = len(matched) / len(required_skills) if required_skills else 0
+
+            score = (
+                (skill_match_ratio * 0.6)
+                + (row["demand_score"] / 10 * 0.2)
+                + (row["growth_rate_percent"] / 10 * 0.1)
+                - (row["competition_index"] / 10 * 0.1)
+            ) * 100
+
+            role_scores.append({
+                "role": role,
+                "score": round(score, 2),
+                "missing_skills": missing,
+                "ai_risk": row["ai_risk_score"],
+                "competition": row["competition_index"],
+                "salary": row["avg_salary_lpa"]
+            })
+
+        # Step 4: Sort and select top 3 roles
+        top_roles = sorted(role_scores, key=lambda x: x["score"], reverse=True)[:3]
 
         st.subheader("🏆 Top 3 Suitable Roles")
 
-        for title, score in role_scores:
-            st.markdown(f"### {title}")
-            st.write(f"Match Score: {score}%")
-            st.markdown("---")
+        # Step 5: Display results
+        for r in top_roles:
+
+            st.markdown(f"### 🧑‍💼 {r['role']}")
+            st.write(f"**Readiness Score:** {r['score']}%")
+            st.write(f"**Average Salary:** {r['salary']} LPA")
+            st.write(f"**AI Risk Score:** {r['ai_risk']}/10")
+            st.write(f"**Competition Index:** {r['competition']}/10")
+
+            if r["missing_skills"]:
+                st.warning("Skill Gap Detected")
+                st.write("**Recommended Skills to Learn:**")
+                for skill in r["missing_skills"]:
+                    st.write(f"• {skill}")
+
+            st.divider()
