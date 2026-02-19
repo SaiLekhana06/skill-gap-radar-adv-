@@ -3,8 +3,11 @@ import pandas as pd
 import re
 import pdfplumber
 from docx import Document
-resume_skills = []
+from PIL import Image
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
+resume_skills = []
 
 # -----------------------------
 # Page Config
@@ -15,37 +18,37 @@ st.set_page_config(page_title="Skill Gap Radar", layout="wide")
 # Load Dataset
 # -----------------------------
 @st.cache_data
-@st.cache_data
-@st.cache_data
 def load_data():
     file = "Skill_Gap_Radar_dataset(1).xlsx"
-
     jobs = pd.read_excel(file, sheet_name="job_description_enriched")
     fields = pd.read_excel(file, sheet_name="field_intelligence")
     resources = pd.read_excel(file, sheet_name="skill_learning_resources")
-
     return jobs, fields, resources
-
 
 df_jobs, df_fields, df_resources = load_data()
 
-# ----------------------------- 
+# -----------------------------
 # Resume Text Extraction
 # -----------------------------
 def extract_text(file):
-    if file.name.endswith(".pdf"):
-        text = ""
+    text = ""
+
+    if file.type == "application/pdf":
         with pdfplumber.open(file) as pdf:
             for page in pdf.pages:
-                text += page.extract_text() + " "
-        return text.lower()
-    elif file.name.endswith(".docx"):
+                if page.extract_text():
+                    text += page.extract_text() + " "
+
+    elif file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         doc = Document(file)
-        text = ""
         for para in doc.paragraphs:
             text += para.text + " "
-        return text.lower()
-    return ""
+
+    elif file.type.startswith("image"):
+        image = Image.open(file)
+        text = pytesseract.image_to_string(image)
+
+    return text.lower()
 
 # -----------------------------
 # Skill Matching
@@ -57,28 +60,25 @@ def match_skills(resume_text, required_skills):
         if re.search(pattern, resume_text):
             matched.append(skill)
     missing = list(set(required_skills) - set(matched))
-    return matched, missing 
+    return matched, missing
+
 # -----------------------------
 # Resume Skill Extraction
 # -----------------------------
 def extract_resume_skills(resume_text):
     skills_found = []
-
-    # Create a master skill list from dataset
     all_skills = set()
 
     for skills in df_jobs["skills_required"]:
         for skill in skills.split(","):
             all_skills.add(skill.strip().lower())
 
-    # Match resume text against known skills
     for skill in all_skills:
         pattern = r"\b" + re.escape(skill) + r"\b"
         if re.search(pattern, resume_text):
             skills_found.append(skill)
 
     return list(set(skills_found))
-
 
 # -----------------------------
 # Weighted Scoring Formula
@@ -117,16 +117,13 @@ if page == "Block 1: Target Job Analyzer":
     job_title = st.selectbox("Select Job Title", sorted(filtered_jobs["job_title"].unique()))
     selected_job = filtered_jobs[filtered_jobs["job_title"] == job_title].iloc[0]
 
-    uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx"])
+    # ✅ Added image formats here
+    uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "jpg", "jpeg", "png"])
 
     if uploaded_file:
         resume_text = extract_text(uploaded_file)
 
-        required_skills = [s.strip() for s in selected_job["skills_required"].split(",")]
-       
-        resume_skills = extract_resume_skills(resume_text)
-
-
+        required_skills = [s.strip().lower() for s in selected_job["skills_required"].split(",")]
         matched, missing = match_skills(resume_text, required_skills)
 
         score = calculate_score(
@@ -150,7 +147,7 @@ if page == "Block 1: Target Job Analyzer":
         if missing:
             st.subheader("📚 Recommended Certifications & Projects")
             for skill in missing:
-                rec = df_resources[df_resources["skill"] == skill]
+                rec = df_resources[df_resources["skill"].str.lower() == skill]
                 if not rec.empty:
                     st.markdown(f"**Skill:** {skill}")
                     st.write("Course:", rec.iloc[0]["recommended_course"])
@@ -161,7 +158,6 @@ if page == "Block 1: Target Job Analyzer":
 # ==============================================================
 # BLOCK 2
 # ==============================================================
-
 elif page == "Block 2: Market Intelligence":
 
     st.title("📈 Market Intelligence Dashboard")
@@ -181,36 +177,25 @@ elif page == "Block 2: Market Intelligence":
 # ==============================================================
 # BLOCK 3
 # ==============================================================
-
 elif page == "Block 3: Resume Role Finder":
 
     st.title("🧠 Resume → Top 3 Suitable Roles")
 
-    uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx"])
+    uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "jpg", "jpeg", "png"])
 
     if uploaded_file:
-
-        # Step 1: Extract resume text
         resume_text = extract_text(uploaded_file)
-
-        # Step 2: Extract skills from resume
         resume_skills = extract_resume_skills(resume_text)
 
         role_scores = []
 
-        # Step 3: Compare resume with all job roles
         for _, row in df_jobs.iterrows():
-
             role = row["job_title"]
-
-            required_skills = [
-                s.strip().lower() for s in row["skills_required"].split(",")
-            ]
+            required_skills = [s.strip().lower() for s in row["skills_required"].split(",")]
 
             matched = set(resume_skills).intersection(required_skills)
             missing = list(set(required_skills) - matched)
 
-            # Weighted professional score
             skill_match_ratio = len(matched) / len(required_skills) if required_skills else 0
 
             score = (
@@ -229,14 +214,11 @@ elif page == "Block 3: Resume Role Finder":
                 "salary": row["avg_salary_lpa"]
             })
 
-        # Step 4: Sort and select top 3 roles
         top_roles = sorted(role_scores, key=lambda x: x["score"], reverse=True)[:3]
 
         st.subheader("🏆 Top 3 Suitable Roles")
 
-        # Step 5: Display results
         for r in top_roles:
-
             st.markdown(f"### 🧑‍💼 {r['role']}")
             st.write(f"**Readiness Score:** {r['score']}%")
             st.write(f"**Average Salary:** {r['salary']} LPA")
