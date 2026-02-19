@@ -124,7 +124,7 @@ if page == "Block 1: Target Job Analyzer":
 
         required_skills = [s.strip() for s in selected_job["skills_required"].split(",")]
        
-        resume_skills = extract_resume_skills(text)
+        resume_skills = extract_resume_skills(resume_text)
 
 
         matched, missing = match_skills(resume_text, required_skills)
