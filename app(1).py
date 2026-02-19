@@ -18,7 +18,7 @@ st.set_page_config(page_title="Skill Gap Radar", layout="wide")
 @st.cache_data
 @st.cache_data
 def load_data():
-    file = r"C:\skill_gap_radar_data\Skill_Gap_Radar_dataset.xlsx"
+    file = "Skill_Gap_Radar_dataset(1).xlsx"
 
     jobs = pd.read_excel(file, sheet_name="job_description_enriched")
     fields = pd.read_excel(file, sheet_name="field_intelligence")
