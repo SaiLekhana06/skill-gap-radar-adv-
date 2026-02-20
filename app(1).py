@@ -145,14 +145,31 @@ if page == "Block 1: Target Job Analyzer":
         st.write(missing if missing else "None")
 
         if missing:
-            st.subheader("📚 Recommended Certifications & Projects")
+            st.subheader("📚 Recommended Learning Path")
+
             for skill in missing:
-                rec = df_resources[df_resources["skill"].str.lower() == skill]
+                rec = df_resources[df_resources["skill"].str.lower() == skill.lower()]
+
                 if not rec.empty:
-                    st.markdown(f"**Skill:** {skill}")
-                    st.write("Course:", rec.iloc[0]["recommended_course"])
-                    st.write("Certification:", rec.iloc[0]["certification"])
-                    st.write("Project:", rec.iloc[0]["project_suggestion"])
+                    course_name = rec.iloc[0]["recommended_course"]
+                    course_url = rec.iloc[0]["course_url"]
+
+                    cert_name = rec.iloc[0]["certification"]
+                    cert_url = rec.iloc[0]["certification_url"]
+
+                    project = rec.iloc[0]["project_suggestion"]
+
+                    st.markdown(f"### 🔹 Skill: **{skill}**")
+
+            # Course hyperlink
+                    st.markdown(f"📘 **Course:** [{course_name}]({course_url})")
+
+            # Certification hyperlink
+                    st.markdown(f"🎓 **Certification:** [{cert_name}]({cert_url})")
+
+            # Project (text only)
+                    st.markdown(f"🛠 **Project:** {project}")
+
                     st.markdown("---")
 
 # ==============================================================
@@ -181,7 +198,10 @@ elif page == "Block 3: Resume Role Finder":
 
     st.title("🧠 Resume → Top 3 Suitable Roles")
 
-    uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "jpg", "jpeg", "png"])
+    uploaded_file = st.file_uploader(
+        "Upload Resume",
+        type=["pdf", "docx", "jpg", "jpeg", "png"]
+    )
 
     if uploaded_file:
         resume_text = extract_text(uploaded_file)
@@ -219,7 +239,7 @@ elif page == "Block 3: Resume Role Finder":
         st.subheader("🏆 Top 3 Suitable Roles")
 
         for r in top_roles:
-            st.markdown(f"### 🧑‍💼 {r['role']}")
+            st.markdown(f"## 🧑‍💼 {r['role']}")
             st.write(f"**Readiness Score:** {r['score']}%")
             st.write(f"**Average Salary:** {r['salary']} LPA")
             st.write(f"**AI Risk Score:** {r['ai_risk']}/10")
@@ -227,8 +247,25 @@ elif page == "Block 3: Resume Role Finder":
 
             if r["missing_skills"]:
                 st.warning("Skill Gap Detected")
-                st.write("**Recommended Skills to Learn:**")
+                st.write("### 📚 Recommended Skills to Learn")
+
                 for skill in r["missing_skills"]:
-                    st.write(f"• {skill}")
+                    rec = df_resources[df_resources["skill"].str.lower() == skill.lower()]
+
+                    st.markdown(f"**🔹 {skill}**")
+
+                    if not rec.empty:
+                        course_name = rec.iloc[0]["recommended_course"]
+                        course_url = rec.iloc[0]["course_url"]
+
+                        cert_name = rec.iloc[0]["certification"]
+                        cert_url = rec.iloc[0]["certification_url"]
+
+                        st.markdown(f"📘 Course: [{course_name}]({course_url})")
+                        st.markdown(f"🎓 Certification: [{cert_name}]({cert_url})")
+                    else:
+                        st.write("No learning resources found.")
+
+                    st.markdown("---")
 
             st.divider()
